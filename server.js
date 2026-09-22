@@ -232,9 +232,9 @@ app.get('/api/timeline', requireAuth, async (req, res) => {
   }
 });
 
-// Edits an existing schedule's days/times/setpoint/fan speed. Only these
-// fields are changeable from the timeline UI — name, group/unit membership,
-// and enabled state are left exactly as CoolRemote already has them.
+// Edits an existing schedule's active state/days/times/setpoint/fan speed.
+// Only these fields are changeable from the timeline UI — name and
+// group/unit membership are left exactly as CoolRemote already has them.
 app.put('/api/schedules/:id', requireAuth, async (req, res) => {
   try {
     const { customer } = await getFirstCustomerAndSite(req.client);
@@ -242,7 +242,7 @@ app.put('/api/schedules/:id', requireAuth, async (req, res) => {
     const schedule = schedules.find((s) => s.id === req.params.id);
     if (!schedule) return res.status(404).json({ error: 'Schedule not found' });
 
-    const { days, powerOnTime, powerOffTime, setpoint, fanMode } = req.body || {};
+    const { days, powerOnTime, powerOffTime, setpoint, fanMode, isDisabled } = req.body || {};
     if (!Array.isArray(days) || days.length === 0 || !days.every((d) => DAY_NAMES.includes(d))) {
       return res.status(400).json({ error: 'days must be a non-empty array of day names' });
     }
@@ -260,7 +260,7 @@ app.put('/api/schedules/:id', requireAuth, async (req, res) => {
     }
 
     const payload = {
-      isDisabled: schedule.isDisabled,
+      isDisabled: typeof isDisabled === 'boolean' ? isDisabled : schedule.isDisabled,
       name: schedule.name,
       scheduleCategory: schedule.scheduleCategory,
       powerOnTime,

@@ -21,6 +21,8 @@ const inactiveButtons = document.querySelectorAll('.inactive-btn[data-inactive]'
 const editModal = document.getElementById('edit-modal');
 const editModalTitle = document.getElementById('edit-modal-title');
 const editModalClose = document.getElementById('edit-modal-close');
+const editStatusEl = document.getElementById('edit-status');
+const editStatusButtons = document.querySelectorAll('.status-toggle[data-status]');
 const editDaysEl = document.getElementById('edit-days');
 const editStartEl = document.getElementById('edit-start');
 const editEndEl = document.getElementById('edit-end');
@@ -398,6 +400,9 @@ function renderDayToggles(activeDays) {
 function openEditModal(seg) {
   editingSchedule = seg;
   editModalTitle.textContent = seg.group ? `Edit — ${seg.source} (${seg.group})` : `Edit — ${seg.source}`;
+  editStatusButtons.forEach((btn) => {
+    btn.classList.toggle('active', (btn.dataset.status === 'inactive') === !!seg.isDisabled);
+  });
   renderDayToggles(seg.days || []);
   editStartEl.value = minutesToTimeValue(seg.rawStart);
   editEndEl.value = minutesToTimeValue(seg.rawEnd);
@@ -436,11 +441,12 @@ async function saveEdit() {
     return;
   }
   const fanMode = Number(editFanEl.value);
+  const isDisabled = [...editStatusButtons].find((b) => b.classList.contains('active'))?.dataset.status === 'inactive';
 
   editSaveBtn.disabled = true;
   editErrorEl.textContent = '';
   try {
-    await apiPut(`/api/schedules/${editingSchedule.id}`, { days, powerOnTime, powerOffTime, setpoint, fanMode });
+    await apiPut(`/api/schedules/${editingSchedule.id}`, { days, powerOnTime, powerOffTime, setpoint, fanMode, isDisabled });
     closeEditModal();
     await refresh();
   } catch (err) {
@@ -450,6 +456,11 @@ async function saveEdit() {
   }
 }
 
+editStatusButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    editStatusButtons.forEach((b) => b.classList.toggle('active', b === btn));
+  });
+});
 editModalClose.addEventListener('click', closeEditModal);
 editCancelBtn.addEventListener('click', closeEditModal);
 editSaveBtn.addEventListener('click', saveEdit);
