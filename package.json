@@ -1,0 +1,17 @@
+{
+  "name": "aircondition-timeline",
+  "version": "1.0.0",
+  "description": "24-hour on/off timeline for all CoolRemote AC units combined into one view",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.19.0",
+    "luxon": "^3.5.0"
+  }
+}

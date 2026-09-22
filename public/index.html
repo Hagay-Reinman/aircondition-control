@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AC Units — 24h Timeline</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="login-view" class="login-view hidden">
+    <form id="login-form" class="login-card">
+      <h1>CoolRemote Login</h1>
+      <p class="hint">Your credentials are used only to talk to CoolRemote for this session — they are never saved to disk.</p>
+      <label for="login-username">Username</label>
+      <input type="text" id="login-username" autocomplete="username" required />
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" autocomplete="current-password" required />
+      <button type="submit">Log in</button>
+      <div id="login-error" class="login-error"></div>
+    </form>
+  </div>
+
+  <div id="app-view" class="hidden">
+    <header>
+      <h1 id="page-title">Air Conditioning</h1>
+      <div class="controls">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="schedule">Schedule</button>
+          <button class="tab-btn" data-tab="history">History</button>
+        </div>
+        <select id="day-picker">
+          <option value="Sunday">Sunday</option>
+          <option value="Monday">Monday</option>
+          <option value="Tuesday">Tuesday</option>
+          <option value="Wednesday">Wednesday</option>
+          <option value="Thursday">Thursday</option>
+          <option value="Friday">Friday</option>
+          <option value="Saturday">Saturday</option>
+        </select>
+        <input type="date" id="date-picker" class="hidden" />
+        <span id="timezone-label" class="timezone"></span>
+        <button id="refresh-btn">Refresh</button>
+        <button id="logout-btn" class="secondary">Log out</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="status"></div>
+      <div id="timeline-wrap"></div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
