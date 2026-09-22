@@ -29,6 +29,18 @@ npm start
 
 Open http://localhost:3000 and log in with your CoolRemote username and password.
 
+## Deploy (Render)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Hagay-Reinman/aircondition-control)
+
+This repo includes a `render.yaml` blueprint, so Render provisions the service and a random
+`SESSION_SECRET` automatically — no manual config needed. Each person who opens the deployed
+URL still logs in with their own CoolRemote credentials; nothing account-specific is baked in.
+
+Render's free web service plan spins the instance down after inactivity (the first request
+after a while takes a few extra seconds to wake it up); pick a paid plan in the Render
+dashboard instead if you want it always warm.
+
 ### Environment variables (`.env`)
 
 | Variable        | Required | Description                                                              |
