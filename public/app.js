@@ -16,7 +16,32 @@ const viewButtons = document.querySelectorAll('.view-btn[data-view]');
 const detailButtons = document.querySelectorAll('.detail-btn[data-detail]');
 const themeButtons = document.querySelectorAll('.theme-btn[data-theme]');
 
+const editModal = document.getElementById('edit-modal');
+const editModalTitle = document.getElementById('edit-modal-title');
+const editModalClose = document.getElementById('edit-modal-close');
+const editDaysEl = document.getElementById('edit-days');
+const editStartEl = document.getElementById('edit-start');
+const editEndEl = document.getElementById('edit-end');
+const editSetpointEl = document.getElementById('edit-setpoint');
+const editFanEl = document.getElementById('edit-fan');
+const editErrorEl = document.getElementById('edit-error');
+const editCancelBtn = document.getElementById('edit-cancel-btn');
+const editSaveBtn = document.getElementById('edit-save-btn');
+
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAY_SHORT = { Sunday: 'Sun', Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat' };
+
+// Mirrors the server's FAN_MODE_LABELS (CoolAutomation FanMode enum), ordered
+// low to high rather than by numeric value.
+const FAN_MODES = [
+  { value: 5, label: 'Very low' },
+  { value: 0, label: 'Low' },
+  { value: 1, label: 'Medium' },
+  { value: 2, label: 'High' },
+  { value: 6, label: 'Super high' },
+  { value: 4, label: 'Top' },
+  { value: 3, label: 'Auto' },
+];
 
 let activeTab = 'schedule';
 let viewMode = 'daily';
@@ -128,6 +153,14 @@ function buildCompactBar(bar, segments, kind) {
     const countLabel = block.sources.length > 1 ? ` (${block.sources.length})` : '';
     el.innerHTML = `<span class="segment-time">${time}${countLabel}</span>`;
     el.title = block.sources.map((seg) => describeSegment(seg, kind)).join('\n\n');
+    if (kind === 'schedule') {
+      el.classList.add('editable');
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (block.sources.length === 1) openEditModal(block.sources[0]);
+        else openSourcePicker(e, block.sources);
+      });
+    }
     bar.appendChild(el);
   }
 }
@@ -158,6 +191,13 @@ function buildDetailedBar(bar, segments, kind) {
       `;
     }
     el.title = describeSegment(seg, kind);
+    if (kind === 'schedule') {
+      el.classList.add('editable');
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditModal(seg);
+      });
+    }
     bar.appendChild(el);
   }
 }
@@ -268,6 +308,147 @@ async function apiGet(url) {
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
+
+async function apiPut(url, body) {
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) {
+    showLogin();
+    throw new Error('Session expired — please log in again.');
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function timeToMinutes(value) {
+  const [h, m] = value.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTimeValue(minutes) {
+  return timeLabel(Math.min(minutes, 1439));
+}
+
+// --- Schedule editing ---
+
+let editingSchedule = null;
+let activePicker = null;
+
+function closeSourcePicker() {
+  if (activePicker) {
+    activePicker.remove();
+    activePicker = null;
+    document.removeEventListener('click', closeSourcePicker);
+  }
+}
+
+// Compact view can merge several overlapping schedules into one block —
+// this lets the user pick which one they meant to click.
+function openSourcePicker(event, sources) {
+  closeSourcePicker();
+  const menu = document.createElement('div');
+  menu.className = 'segment-picker';
+  for (const seg of sources) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = `${seg.source}${seg.group ? ` (${seg.group})` : ''} · ${timeLabel(seg.start)}–${timeLabel(seg.end)}`;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeSourcePicker();
+      openEditModal(seg);
+    });
+    menu.appendChild(btn);
+  }
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  let left = event.clientX;
+  let top = event.clientY;
+  if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 8;
+  if (top + rect.height > window.innerHeight) top = window.innerHeight - rect.height - 8;
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+  activePicker = menu;
+  setTimeout(() => document.addEventListener('click', closeSourcePicker), 0);
+}
+
+function renderDayToggles(activeDays) {
+  editDaysEl.innerHTML = '';
+  for (const day of DAY_NAMES) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `day-toggle${activeDays.includes(day) ? ' active' : ''}`;
+    btn.textContent = DAY_SHORT[day];
+    btn.dataset.day = day;
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
+    editDaysEl.appendChild(btn);
+  }
+}
+
+function openEditModal(seg) {
+  editingSchedule = seg;
+  editModalTitle.textContent = seg.group ? `Edit — ${seg.source} (${seg.group})` : `Edit — ${seg.source}`;
+  renderDayToggles(seg.days || []);
+  editStartEl.value = minutesToTimeValue(seg.rawStart);
+  editEndEl.value = minutesToTimeValue(seg.rawEnd);
+  editSetpointEl.value = seg.setpoint != null ? seg.setpoint : 22;
+  editFanEl.innerHTML = FAN_MODES.map((f) => `<option value="${f.value}">${f.label}</option>`).join('');
+  editFanEl.value = seg.fanMode != null ? seg.fanMode : 3;
+  editErrorEl.textContent = '';
+  editModal.classList.remove('hidden');
+}
+
+function closeEditModal() {
+  editModal.classList.add('hidden');
+  editingSchedule = null;
+}
+
+async function saveEdit() {
+  if (!editingSchedule) return;
+  const days = [...editDaysEl.querySelectorAll('.day-toggle.active')].map((b) => b.dataset.day);
+  if (days.length === 0) {
+    editErrorEl.textContent = 'Pick at least one day.';
+    return;
+  }
+  if (editStartEl.value === '' || editEndEl.value === '') {
+    editErrorEl.textContent = 'Start and end time are required.';
+    return;
+  }
+  const powerOnTime = timeToMinutes(editStartEl.value);
+  const powerOffTime = timeToMinutes(editEndEl.value);
+  if (powerOnTime === powerOffTime) {
+    editErrorEl.textContent = 'Start and end time can\'t be the same.';
+    return;
+  }
+  const setpoint = Number(editSetpointEl.value);
+  if (Number.isNaN(setpoint)) {
+    editErrorEl.textContent = 'Enter a valid temperature.';
+    return;
+  }
+  const fanMode = Number(editFanEl.value);
+
+  editSaveBtn.disabled = true;
+  editErrorEl.textContent = '';
+  try {
+    await apiPut(`/api/schedules/${editingSchedule.id}`, { days, powerOnTime, powerOffTime, setpoint, fanMode });
+    closeEditModal();
+    await refresh();
+  } catch (err) {
+    editErrorEl.textContent = err.message;
+  } finally {
+    editSaveBtn.disabled = false;
+  }
+}
+
+editModalClose.addEventListener('click', closeEditModal);
+editCancelBtn.addEventListener('click', closeEditModal);
+editSaveBtn.addEventListener('click', saveEdit);
+editModal.addEventListener('click', (e) => {
+  if (e.target === editModal) closeEditModal();
+});
 
 let lastRender = null; // { groups, kind, statusText } — cached so toggling Compact/Detailed doesn't refetch
 

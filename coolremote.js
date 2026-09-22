@@ -28,9 +28,10 @@ class CoolRemoteClient {
     return this.token;
   }
 
-  async _request(path, { retryOn401 = true } = {}) {
+  async _request(path, { method = 'GET', body: requestBody, retryOn401 = true } = {}) {
     const token = await this._ensureToken();
     const res = await fetch(`${BASE_URL}${path}`, {
+      method,
       headers: {
         'x-access-token': token,
         'content-type': 'application/json',
@@ -40,18 +41,19 @@ class CoolRemoteClient {
         Origin: 'https://control.coolremote.net',
         Referer: 'https://control.coolremote.net/site',
       },
+      body: requestBody != null ? JSON.stringify(requestBody) : undefined,
     });
 
     if (res.status === 401 && retryOn401) {
       this.token = null;
-      return this._request(path, { retryOn401: false });
+      return this._request(path, { method, body: requestBody, retryOn401: false });
     }
 
-    const body = await res.json();
-    if (!res.ok || body.success === false) {
-      throw new Error(`CoolRemote request failed (${path}): ${body.message || res.status}`);
+    const responseBody = await res.json();
+    if (!res.ok || responseBody.success === false) {
+      throw new Error(`CoolRemote request failed (${path}): ${responseBody.message || res.status}`);
     }
-    return body.data;
+    return responseBody.data;
   }
 
   async getCustomers() {
@@ -77,6 +79,16 @@ class CoolRemoteClient {
   async getSchedules(customerId) {
     const data = await this._request(`/customers/${customerId}/schedules`);
     return Object.values(data);
+  }
+
+  // Updates an existing schedule. Fields left out of `payload` are preserved
+  // server-side (e.g. group/units membership) — this mirrors what the
+  // CoolRemote web app's own "Edit Schedule" form sends (verified by
+  // inspecting its network request), which only includes the fields the
+  // form itself exposes: isDisabled, name, powerOnTime, powerOffTime,
+  // setpoint, scheduleCategory, fanMode, days.
+  async updateSchedule(scheduleId, payload) {
+    return this._request(`/schedules/${scheduleId}`, { method: 'PUT', body: payload });
   }
 
   // Actual historical runtime, hour by hour, for one unit — as opposed to

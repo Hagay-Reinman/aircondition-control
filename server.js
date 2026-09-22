@@ -115,11 +115,19 @@ function buildScheduleSegments(schedulesForDay, groupById) {
   const offMarkers = [];
   for (const schedule of schedulesForDay) {
     const detail = {
+      id: schedule.id,
       source: schedule.name,
       group: groupById[schedule.group] || null,
       setpoint: schedule.setpoint,
       fan: FAN_MODE_LABELS[schedule.fanMode] || null,
+      fanMode: schedule.fanMode,
       mode: OPERATION_MODE_LABELS[schedule.runMode] || null,
+      days: schedule.days || [],
+      // The schedule's own start/end, independent of `start`/`end` below —
+      // which get split at midnight for display and so can't be edited from
+      // directly (a midnight-crossing schedule renders as two segments).
+      rawStart: schedule.powerOnTime,
+      rawEnd: schedule.powerOffTime != null ? schedule.powerOffTime : 1440,
     };
     if (schedule.powerOnTime == null) {
       if (schedule.powerOffTime != null) offMarkers.push({ time: schedule.powerOffTime, ...detail });
@@ -216,6 +224,51 @@ app.get('/api/timeline', requireAuth, async (req, res) => {
     });
 
     res.json({ mode, day: dayName, timezone, groups: groupOutput });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Edits an existing schedule's days/times/setpoint/fan speed. Only these
+// fields are changeable from the timeline UI — name, group/unit membership,
+// and enabled state are left exactly as CoolRemote already has them.
+app.put('/api/schedules/:id', requireAuth, async (req, res) => {
+  try {
+    const { customer } = await getFirstCustomerAndSite(req.client);
+    const schedules = await req.client.getSchedules(customer.id);
+    const schedule = schedules.find((s) => s.id === req.params.id);
+    if (!schedule) return res.status(404).json({ error: 'Schedule not found' });
+
+    const { days, powerOnTime, powerOffTime, setpoint, fanMode } = req.body || {};
+    if (!Array.isArray(days) || days.length === 0 || !days.every((d) => DAY_NAMES.includes(d))) {
+      return res.status(400).json({ error: 'days must be a non-empty array of day names' });
+    }
+    if (!Number.isInteger(powerOnTime) || powerOnTime < 0 || powerOnTime >= 1440) {
+      return res.status(400).json({ error: 'powerOnTime must be minutes since midnight (0-1439)' });
+    }
+    if (!Number.isInteger(powerOffTime) || powerOffTime < 0 || powerOffTime > 1440) {
+      return res.status(400).json({ error: 'powerOffTime must be minutes since midnight (0-1440)' });
+    }
+    if (typeof setpoint !== 'number' || Number.isNaN(setpoint)) {
+      return res.status(400).json({ error: 'setpoint must be a number' });
+    }
+    if (!Number.isInteger(fanMode) || !(fanMode in FAN_MODE_LABELS)) {
+      return res.status(400).json({ error: 'Invalid fan mode' });
+    }
+
+    const payload = {
+      isDisabled: schedule.isDisabled,
+      name: schedule.name,
+      scheduleCategory: schedule.scheduleCategory,
+      powerOnTime,
+      powerOffTime,
+      setpoint,
+      fanMode,
+      days,
+    };
+    await req.client.updateSchedule(req.params.id, payload);
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: err.message });
