@@ -1,13 +1,32 @@
 :root {
   color-scheme: dark;
-  --bg: #1c1330;
-  --panel: #241a3d;
-  --border: #3a2c5c;
-  --text: #ece7f7;
-  --muted: #9c8fc4;
-  --on: #34d399;
-  --off: #372a55;
-  --accent: #7c5cff;
+  --bg: #0e1830;
+  --panel: #172444;
+  --border: #2d3f68;
+  --text: #eaf0ff;
+  --muted: #93a3c9;
+  --on: #10e0a4;
+  --on-grad: linear-gradient(135deg, #2af5c8, #06c78a);
+  --off: #1d2c50;
+  --heat: #ff6a5a;
+  --heat-grad: linear-gradient(135deg, #ffb648, #ff5566);
+  --running: #38bdf8;
+  --running-grad: linear-gradient(135deg, #60cffb, #0ea5e9);
+  --amber: #ffcb3d;
+  --accent: #6495ed;
+  --accent-grad: linear-gradient(135deg, #82a8f2, #5578dd);
+  --accent-shadow: rgba(100, 149, 237, 0.4);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #dfe6f5;
+  --panel: #eaeff9;
+  --border: #c1cde6;
+  --text: #1a2540;
+  --muted: #5b6790;
+  --off: #d3dcf0;
+  --accent-shadow: rgba(100, 149, 237, 0.3);
 }
 
 * { box-sizing: border-box; }
@@ -51,16 +70,17 @@ h1 {
 }
 
 .controls button {
-  background: var(--accent);
+  background: var(--accent-grad);
   color: white;
   border: none;
   padding: 7px 16px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
+  box-shadow: 0 2px 10px var(--accent-shadow);
 }
 
-.controls button:hover { opacity: 0.9; }
+.controls button:hover { filter: brightness(1.1); }
 
 .controls button.secondary {
   background: transparent;
@@ -90,8 +110,9 @@ h1 {
 }
 
 .controls .tab-btn.active {
-  background: var(--accent);
+  background: var(--accent-grad);
   color: white;
+  box-shadow: 0 2px 8px var(--accent-shadow);
 }
 
 .login-view {
@@ -141,13 +162,14 @@ h1 {
 
 .login-card button {
   margin-top: 8px;
-  background: var(--accent);
+  background: var(--accent-grad);
   color: white;
   border: none;
   padding: 10px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
+  box-shadow: 0 2px 10px var(--accent-shadow);
 }
 
 .login-error {
@@ -170,65 +192,167 @@ main {
 
 #status.error { color: #f87171; }
 
-.group-title {
-  margin: 24px 0 8px;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.axis {
+  display: flex;
+  padding-left: 190px;
+  padding-right: 14px;
+  font-size: 11px;
   color: var(--muted);
+  margin-bottom: 6px;
 }
 
-.group-title:first-child { margin-top: 0; }
+.axis span {
+  flex: 1;
+  text-align: left;
+}
 
-table.timeline {
-  border-collapse: separate;
-  border-spacing: 0;
-  width: 100%;
+.axis span:last-child {
+  flex: 0;
+  text-align: right;
+}
+
+.groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.group-block {
   background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid var(--border);
 }
 
-table.timeline th, table.timeline td {
-  padding: 0;
-  text-align: center;
-  font-size: 11px;
-}
-
-table.timeline thead th {
-  padding: 8px 2px;
-  color: var(--muted);
-  font-weight: 500;
+.group-header {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
   border-bottom: 1px solid var(--border);
 }
 
-table.timeline .unit-name {
-  text-align: left;
-  padding: 10px 14px;
+.day-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.day-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+.day-label {
+  flex: 0 0 176px;
+  padding: 0 14px;
+  font-size: 12px;
+  color: var(--muted);
   white-space: nowrap;
-  font-size: 13px;
-  min-width: 160px;
-  border-right: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-table.timeline tbody tr:not(:last-child) td {
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+.timeline-bar {
+  position: relative;
+  flex: 1;
+  margin-right: 14px;
+  min-height: 26px;
 }
 
-.hour-cell {
-  width: 3.2%;
-  height: 34px;
-}
-
-.hour-cell .fill {
-  width: 100%;
-  height: 100%;
+.timeline-bar .track {
+  position: absolute;
+  inset: 0;
   background: var(--off);
+  border-radius: 6px;
 }
 
-.hour-cell.on .fill {
-  background: var(--on);
+.timeline-bar.empty {
+  display: flex;
+  align-items: center;
+}
+
+.no-activity {
+  position: relative;
+  padding-left: 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.segment {
+  position: absolute;
+  border-radius: 5px;
+  background: var(--on-grad);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: #04241a;
+  overflow: hidden;
+  padding: 2px 6px;
+  cursor: default;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.segment.compact {
+  font-size: 11px;
+}
+
+.off-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--amber);
+  box-shadow: 0 0 6px rgba(255, 203, 61, 0.7);
+  transform: translateX(-50%);
+  cursor: default;
+  z-index: 2;
+}
+
+.off-marker::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--amber);
+}
+
+.legend .off-marker-swatch {
+  position: relative;
+  width: 3px;
+  background: var(--amber);
+  height: 14px;
+}
+
+.segment.heat {
+  background: var(--heat-grad);
+  color: #2e0e02;
+}
+
+.segment.running {
+  background: var(--running-grad);
+  color: #100c30;
+}
+
+.segment-time {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.segment-detail,
+.segment-source {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  opacity: 0.85;
 }
 
 .legend {
@@ -236,6 +360,7 @@ table.timeline tbody tr:not(:last-child) td {
   display: flex;
   gap: 20px;
   align-items: center;
+  flex-wrap: wrap;
   font-size: 12px;
   color: var(--muted);
 }
@@ -249,16 +374,7 @@ table.timeline tbody tr:not(:last-child) td {
   vertical-align: middle;
 }
 
-.gradient-legend {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.gradient-bar {
-  display: inline-block;
-  width: 120px;
-  height: 12px;
-  border-radius: 3px;
-  background: linear-gradient(to right, var(--off), var(--on));
+.legend-note {
+  font-size: 11px;
+  opacity: 0.8;
 }

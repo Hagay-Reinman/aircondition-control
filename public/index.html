@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AC Units — 24h Timeline</title>
   <link rel="stylesheet" href="style.css" />
+  <script>
+    try {
+      var savedTheme = localStorage.getItem('ac-theme');
+      if (savedTheme === 'light') document.documentElement.dataset.theme = 'light';
+    } catch (err) {}
+  </script>
 </head>
 <body>
   <div id="login-view" class="login-view hidden">
@@ -28,6 +34,14 @@
           <button class="tab-btn active" data-tab="schedule">Schedule</button>
           <button class="tab-btn" data-tab="history">History</button>
         </div>
+        <div class="tabs">
+          <button class="tab-btn view-btn active" data-view="daily">Daily</button>
+          <button class="tab-btn view-btn" data-view="weekly">Weekly</button>
+        </div>
+        <div class="tabs">
+          <button class="tab-btn detail-btn active" data-detail="compact">Compact</button>
+          <button class="tab-btn detail-btn" data-detail="detailed">Detailed</button>
+        </div>
         <select id="day-picker">
           <option value="Sunday">Sunday</option>
           <option value="Monday">Monday</option>
@@ -39,6 +53,10 @@
         </select>
         <input type="date" id="date-picker" class="hidden" />
         <span id="timezone-label" class="timezone"></span>
+        <div class="tabs">
+          <button class="tab-btn theme-btn active" data-theme="dark">Dark</button>
+          <button class="tab-btn theme-btn" data-theme="light">Light</button>
+        </div>
         <button id="refresh-btn">Refresh</button>
         <button id="logout-btn" class="secondary">Log out</button>
       </div>

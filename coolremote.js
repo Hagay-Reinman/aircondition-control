@@ -81,8 +81,8 @@ class CoolRemoteClient {
 
   // Actual historical runtime, hour by hour, for one unit — as opposed to
   // getSchedules(), which is the *planned* recurring timer.
-  async getUnitHourlyStats(unitId, startTimeUTC, endTimeUTC) {
-    const path = `/service-params/units/${unitId}/stats/basic/summary?startTimeUTC=${startTimeUTC}&endTimeUTC=${endTimeUTC}&bucketSizeMsec=3600000`;
+  async getUnitHourlyStats(unitId, startTimeUTC, endTimeUTC, bucketSizeMsec = 3_600_000) {
+    const path = `/service-params/units/${unitId}/stats/basic/summary?startTimeUTC=${startTimeUTC}&endTimeUTC=${endTimeUTC}&bucketSizeMsec=${bucketSizeMsec}`;
     const data = await this._request(path);
     return data.buckets || [];
   }
