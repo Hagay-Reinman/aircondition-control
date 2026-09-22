@@ -397,6 +397,22 @@ function renderDayToggles(activeDays) {
   }
 }
 
+// Snapshot of the form's state, used to detect unsaved changes on close.
+function editFormState() {
+  const days = [...editDaysEl.querySelectorAll('.day-toggle.active')].map((b) => b.dataset.day).sort();
+  const isDisabled = [...editStatusButtons].find((b) => b.classList.contains('active'))?.dataset.status === 'inactive';
+  return JSON.stringify({
+    isDisabled,
+    days,
+    start: editStartEl.value,
+    end: editEndEl.value,
+    setpoint: editSetpointEl.value,
+    fanMode: editFanEl.value,
+  });
+}
+
+let editInitialState = null;
+
 function openEditModal(seg) {
   editingSchedule = seg;
   editModalTitle.textContent = seg.group ? `Edit — ${seg.source} (${seg.group})` : `Edit — ${seg.source}`;
@@ -411,11 +427,21 @@ function openEditModal(seg) {
   editFanEl.value = seg.fanMode != null ? seg.fanMode : 3;
   editErrorEl.textContent = '';
   editModal.classList.remove('hidden');
+  editInitialState = editFormState();
 }
 
 function closeEditModal() {
   editModal.classList.add('hidden');
   editingSchedule = null;
+  editInitialState = null;
+}
+
+// Closes the modal, but warns first if the form was changed and not saved.
+function requestCloseEditModal() {
+  if (editingSchedule && editInitialState !== null && editFormState() !== editInitialState) {
+    if (!window.confirm('You have unsaved changes. Discard them?')) return;
+  }
+  closeEditModal();
 }
 
 async function saveEdit() {
@@ -461,11 +487,14 @@ editStatusButtons.forEach((btn) => {
     editStatusButtons.forEach((b) => b.classList.toggle('active', b === btn));
   });
 });
-editModalClose.addEventListener('click', closeEditModal);
-editCancelBtn.addEventListener('click', closeEditModal);
+editModalClose.addEventListener('click', requestCloseEditModal);
+editCancelBtn.addEventListener('click', requestCloseEditModal);
 editSaveBtn.addEventListener('click', saveEdit);
 editModal.addEventListener('click', (e) => {
-  if (e.target === editModal) closeEditModal();
+  if (e.target === editModal) requestCloseEditModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !editModal.classList.contains('hidden')) requestCloseEditModal();
 });
 
 let lastRender = null; // { groups, kind, statusText } — cached so toggling Compact/Detailed doesn't refetch
