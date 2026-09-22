@@ -15,6 +15,8 @@ const tabButtons = document.querySelectorAll('.tab-btn[data-tab]');
 const viewButtons = document.querySelectorAll('.view-btn[data-view]');
 const detailButtons = document.querySelectorAll('.detail-btn[data-detail]');
 const themeButtons = document.querySelectorAll('.theme-btn[data-theme]');
+const inactiveToggleEl = document.getElementById('inactive-toggle');
+const inactiveButtons = document.querySelectorAll('.inactive-btn[data-inactive]');
 
 const editModal = document.getElementById('edit-modal');
 const editModalTitle = document.getElementById('edit-modal-title');
@@ -46,6 +48,7 @@ const FAN_MODES = [
 let activeTab = 'schedule';
 let viewMode = 'daily';
 let detailMode = 'compact';
+let showInactive = false;
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text;
@@ -104,7 +107,8 @@ function describeSegment(seg, kind) {
     if (seg.fan) detailParts.push(`${seg.fan} fan`);
     const extra = detailParts.length ? ` · ${detailParts.join(' · ')}` : '';
     const groupPart = seg.group ? ` (${seg.group})` : '';
-    return `${seg.source}${groupPart}\n${time}${extra}`;
+    const inactivePart = seg.isDisabled ? ' · Inactive' : '';
+    return `${seg.source}${groupPart}\n${time}${extra}${inactivePart}`;
   }
   return `${time} · ${seg.mode} (actual compressor activity — CoolRemote's runtime stats don't report setpoint/fan)`;
 }
@@ -146,7 +150,8 @@ function buildCompactBar(bar, segments, kind) {
   bar.style.height = `${LANE_HEIGHT_COMPACT}px`;
   for (const block of mergeSegments(segments)) {
     const el = document.createElement('div');
-    el.className = `segment compact ${block.sources.some((s) => segmentClass(s, kind) === 'heat') ? 'heat' : 'cool'}`;
+    const blockInactive = kind === 'schedule' && block.sources.every((s) => s.isDisabled);
+    el.className = `segment compact ${block.sources.some((s) => segmentClass(s, kind) === 'heat') ? 'heat' : 'cool'}${blockInactive ? ' inactive' : ''}`;
     positionEl(el, block.start, block.end, LANE_GAP / 2, LANE_HEIGHT_COMPACT - LANE_GAP);
 
     const time = `${timeLabel(block.start)}–${timeLabel(block.end)}`;
@@ -171,7 +176,7 @@ function buildDetailedBar(bar, segments, kind) {
 
   for (const seg of laid) {
     const el = document.createElement('div');
-    el.className = `segment ${segmentClass(seg, kind)}`;
+    el.className = `segment ${segmentClass(seg, kind)}${kind === 'schedule' && seg.isDisabled ? ' inactive' : ''}`;
     positionEl(el, seg.start, seg.end, seg.lane * LANE_HEIGHT_DETAILED + LANE_GAP / 2, LANE_HEIGHT_DETAILED - LANE_GAP);
 
     const time = `${timeLabel(seg.start)}–${timeLabel(seg.end)}`;
@@ -179,6 +184,7 @@ function buildDetailedBar(bar, segments, kind) {
       const detailParts = [];
       if (seg.setpoint != null) detailParts.push(`${seg.setpoint}°C`);
       if (seg.fan) detailParts.push(`${seg.fan} fan`);
+      if (seg.isDisabled) detailParts.push('Inactive');
       el.innerHTML = `
         <span class="segment-time">${time}</span>
         <span class="segment-detail">${detailParts.join(' · ')}</span>
@@ -293,6 +299,7 @@ function renderLegend(kind) {
     <span><span class="swatch" style="background:var(--on-grad)"></span>Cooling</span>
     <span><span class="swatch" style="background:var(--heat-grad)"></span>Heating</span>
     ${kind === 'schedule' ? '<span><span class="swatch off-marker-swatch"></span>Shutoff-only schedule</span>' : ''}
+    ${kind === 'schedule' && showInactive ? '<span><span class="swatch inactive-swatch"></span>Inactive schedule</span>' : ''}
     ${kind === 'history' ? '<span class="legend-note">Times shown to the nearest 5 minutes, from actual runtime.</span>' : ''}
   `;
   wrapEl.appendChild(legend);
@@ -355,7 +362,7 @@ function openSourcePicker(event, sources) {
   for (const seg of sources) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = `${seg.source}${seg.group ? ` (${seg.group})` : ''} · ${timeLabel(seg.start)}–${timeLabel(seg.end)}`;
+    btn.textContent = `${seg.source}${seg.group ? ` (${seg.group})` : ''} · ${timeLabel(seg.start)}–${timeLabel(seg.end)}${seg.isDisabled ? ' · Inactive' : ''}`;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       closeSourcePicker();
@@ -460,13 +467,14 @@ function renderCached() {
 }
 
 async function loadSchedule(dayName) {
-  const data = await apiGet(`/api/timeline?day=${dayName}&mode=${viewMode}`);
+  const data = await apiGet(`/api/timeline?day=${dayName}&mode=${viewMode}&includeInactive=${showInactive}`);
   timezoneLabel.textContent = data.timezone ? `(${data.timezone})` : '';
   if (data.groups.length === 0) return setStatus('No groups found.');
+  const inactiveNote = showInactive ? ' (including inactive)' : '';
   const statusText =
     viewMode === 'weekly'
-      ? `Showing recurring weekly schedule — ${data.groups.length} locations`
-      : `Showing recurring schedule for ${dayName} — ${data.groups.length} locations`;
+      ? `Showing recurring weekly schedule${inactiveNote} — ${data.groups.length} locations`
+      : `Showing recurring schedule for ${dayName}${inactiveNote} — ${data.groups.length} locations`;
   lastRender = { groups: data.groups, kind: 'schedule', statusText };
   renderGroups(data.groups, 'schedule');
   setStatus(statusText);
@@ -500,6 +508,7 @@ async function refresh() {
 function updateControlsVisibility() {
   dayPicker.classList.toggle('hidden', !(activeTab === 'schedule' && viewMode === 'daily'));
   datePicker.classList.toggle('hidden', activeTab !== 'history');
+  inactiveToggleEl.classList.toggle('hidden', activeTab !== 'schedule');
 }
 
 function setTab(tab) {
@@ -523,6 +532,12 @@ function setDetailMode(mode) {
   renderCached();
 }
 
+function setInactiveVisible(show) {
+  showInactive = show;
+  inactiveButtons.forEach((btn) => btn.classList.toggle('active', (btn.dataset.inactive === 'show') === show));
+  refresh();
+}
+
 function setTheme(theme) {
   themeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.theme === theme));
   if (theme === 'light') document.documentElement.dataset.theme = 'light';
@@ -535,6 +550,7 @@ function setTheme(theme) {
 tabButtons.forEach((btn) => btn.addEventListener('click', () => setTab(btn.dataset.tab)));
 viewButtons.forEach((btn) => btn.addEventListener('click', () => setView(btn.dataset.view)));
 detailButtons.forEach((btn) => btn.addEventListener('click', () => setDetailMode(btn.dataset.detail)));
+inactiveButtons.forEach((btn) => btn.addEventListener('click', () => setInactiveVisible(btn.dataset.inactive === 'show')));
 themeButtons.forEach((btn) => btn.addEventListener('click', () => setTheme(btn.dataset.theme)));
 setTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
 refreshBtn.addEventListener('click', refresh);

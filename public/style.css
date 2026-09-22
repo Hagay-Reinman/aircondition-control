@@ -299,6 +299,11 @@ main {
   font-size: 11px;
 }
 
+.legend .inactive-swatch {
+  background: repeating-linear-gradient(135deg, var(--off), var(--off) 4px, var(--panel) 4px, var(--panel) 8px);
+  border: 1px solid var(--border);
+}
+
 .off-marker {
   position: absolute;
   top: 0;
@@ -339,6 +344,19 @@ main {
 .segment.running {
   background: var(--running-grad);
   color: #100c30;
+}
+
+.segment.inactive {
+  opacity: 0.45;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--off),
+    var(--off) 6px,
+    var(--panel) 6px,
+    var(--panel) 12px
+  );
+  color: var(--muted);
+  box-shadow: none;
 }
 
 .segment-time {

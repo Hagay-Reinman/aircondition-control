@@ -123,6 +123,7 @@ function buildScheduleSegments(schedulesForDay, groupById) {
       fanMode: schedule.fanMode,
       mode: OPERATION_MODE_LABELS[schedule.runMode] || null,
       days: schedule.days || [],
+      isDisabled: !!schedule.isDisabled,
       // The schedule's own start/end, independent of `start`/`end` below —
       // which get split at midnight for display and so can't be edited from
       // directly (a midnight-crossing schedule renders as two segments).
@@ -199,6 +200,7 @@ app.get('/api/timeline', requireAuth, async (req, res) => {
     const { customer, site } = await getFirstCustomerAndSite(req.client);
     const timezone = site.timezone || 'UTC';
     const mode = req.query.mode === 'weekly' ? 'weekly' : 'daily';
+    const includeInactive = req.query.includeInactive === 'true';
     const dayName = DAY_NAMES.includes(req.query.day)
       ? req.query.day
       : DAY_NAMES[DateTime.now().setZone(timezone).weekday % 7];
@@ -215,7 +217,7 @@ app.get('/api/timeline', requireAuth, async (req, res) => {
     const groupOutput = [...leafGroupScope.entries()].map(([leafId, scope]) => {
       const days = dayNames.map((dn) => {
         const schedulesForDay = schedules.filter(
-          (s) => !s.isDisabled && (s.days || []).includes(dn) && scope.has(s.group)
+          (s) => (includeInactive || !s.isDisabled) && (s.days || []).includes(dn) && scope.has(s.group)
         );
         const { segments, offMarkers } = buildScheduleSegments(schedulesForDay, groupById);
         return { day: dn, segments, offMarkers };
