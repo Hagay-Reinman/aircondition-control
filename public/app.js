@@ -123,20 +123,48 @@ function describeOffMarker(marker) {
   return `${marker.source}${groupPart}\nShuts off at ${timeLabel(marker.time)}`;
 }
 
-// Unions overlapping/touching segments into single blocks, for the compact
-// view where several schedules covering the same time range collapse into
-// one row instead of stacking lanes.
+// Collapses overlapping schedules into the actual on/off state of the unit,
+// for the compact view. Each schedule independently issues an ON command at
+// its start and an OFF command at its end — the unit isn't "on if any
+// schedule says on", it's simply whatever the most recent command set it
+// to. So e.g. a 06:00–24:00 schedule plus a 10:00–12:00 schedule on the same
+// unit actually only runs 06:00–12:00: the second schedule's OFF at 12:00
+// overrides the first, and nothing turns it on again after that.
 function mergeSegments(segments) {
-  const sorted = [...segments].sort((a, b) => a.start - b.start);
-  const merged = [];
-  for (const seg of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && seg.start <= last.end) {
-      last.end = Math.max(last.end, seg.end);
-      last.sources.push(seg);
-    } else {
-      merged.push({ start: seg.start, end: seg.end, sources: [seg] });
+  if (segments.length === 0) return [];
+  const events = [];
+  for (const seg of segments) {
+    events.push({ time: seg.start, on: true });
+    events.push({ time: seg.end, on: false });
+  }
+  // At a tie, apply OFF before ON — so a schedule that starts exactly when
+  // another ends reads as one continuous on-period, not a momentary gap.
+  events.sort((a, b) => a.time - b.time || (a.on === b.on ? 0 : a.on ? 1 : -1));
+
+  const onIntervals = [];
+  let isOn = false;
+  let blockStart = null;
+  for (const ev of events) {
+    if (ev.on && !isOn) {
+      isOn = true;
+      blockStart = ev.time;
+    } else if (!ev.on && isOn) {
+      isOn = false;
+      if (ev.time > blockStart) onIntervals.push({ start: blockStart, end: ev.time });
     }
+  }
+
+  // Adjacent intervals split only by tie-breaking (no real gap) collapse
+  // back into one block.
+  const merged = [];
+  for (const iv of onIntervals) {
+    const last = merged[merged.length - 1];
+    if (last && iv.start <= last.end) last.end = Math.max(last.end, iv.end);
+    else merged.push({ ...iv });
+  }
+
+  for (const block of merged) {
+    block.sources = segments.filter((seg) => seg.start < block.end && seg.end > block.start);
   }
   return merged;
 }
