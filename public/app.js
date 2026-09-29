@@ -3,6 +3,7 @@ const appView = document.getElementById('app-view');
 const loginForm = document.getElementById('login-form');
 const loginError = document.getElementById('login-error');
 const logoutBtn = document.getElementById('logout-btn');
+const roleBadge = document.getElementById('role-badge');
 
 const statusEl = document.getElementById('status');
 const wrapEl = document.getElementById('timeline-wrap');
@@ -51,6 +52,7 @@ let activeTab = 'schedule';
 let viewMode = 'daily';
 let detailMode = 'compact';
 let showInactive = false;
+let isAdmin = false;
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text;
@@ -188,7 +190,7 @@ function buildCompactBar(bar, segments, kind) {
     const countLabel = block.sources.length > 1 ? ` (${block.sources.length})` : '';
     el.innerHTML = `<span class="segment-time">${time}${countLabel}</span>`;
     el.title = block.sources.map((seg) => describeSegment(seg, kind)).join('\n\n');
-    if (kind === 'schedule') {
+    if (kind === 'schedule' && isAdmin) {
       el.classList.add('editable');
       el.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -227,7 +229,7 @@ function buildDetailedBar(bar, segments, kind) {
       `;
     }
     el.title = describeSegment(seg, kind);
-    if (kind === 'schedule') {
+    if (kind === 'schedule' && isAdmin) {
       el.classList.add('editable');
       el.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -630,7 +632,10 @@ function showLogin() {
   appView.classList.add('hidden');
 }
 
-function showApp() {
+function showApp(role) {
+  isAdmin = role === 'admin';
+  roleBadge.textContent = isAdmin ? 'Admin' : 'View only';
+  roleBadge.classList.toggle('viewer', !isAdmin);
   loginView.classList.add('hidden');
   appView.classList.remove('hidden');
   dayPicker.value = DAY_NAMES[new Date().getDay()];
@@ -651,7 +656,7 @@ loginForm.addEventListener('submit', async (e) => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Login failed');
-    showApp();
+    showApp(data.role);
   } catch (err) {
     loginError.textContent = err.message;
   }
@@ -665,6 +670,6 @@ logoutBtn.addEventListener('click', async () => {
 (async function init() {
   const res = await fetch('/api/session');
   const data = await res.json();
-  if (data.authenticated) showApp();
+  if (data.authenticated) showApp(data.role);
   else showLogin();
 })();

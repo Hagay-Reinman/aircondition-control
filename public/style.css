@@ -180,6 +180,20 @@ h1 {
 
 .timezone { font-size: 12px; opacity: 0.8; }
 
+.role-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.role-badge.viewer {
+  border-color: var(--border);
+  color: var(--muted);
+}
+
 main {
   padding: 24px;
 }

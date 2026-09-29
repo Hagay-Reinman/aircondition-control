@@ -30,10 +30,18 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function requireAdmin(req, res, next) {
+  if (req.session.role !== 'admin') {
+    return res.status(403).json({ error: 'Read-only access — only admins can modify schedules' });
+  }
+  next();
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/session', (req, res) => {
-  res.json({ authenticated: clientsBySession.has(req.session.id) });
+  const authenticated = clientsBySession.has(req.session.id);
+  res.json({ authenticated, role: authenticated ? req.session.role : null });
 });
 
 app.post('/api/login', async (req, res) => {
@@ -46,11 +54,22 @@ app.post('/api/login', async (req, res) => {
   } catch (err) {
     return res.status(401).json({ error: 'Invalid CoolRemote username or password' });
   }
+  // The account's own CoolRemote permissions decide the role: only accounts
+  // CoolRemote lets update the customer can edit schedules here.
+  let customer;
+  try {
+    [customer] = await client.getCustomers();
+  } catch (err) {
+    console.error(err);
+    return res.status(502).json({ error: 'Could not load CoolRemote account permissions' });
+  }
+  const role = customer && customer.permissions && customer.permissions.canUpdate ? 'admin' : 'viewer';
   clientsBySession.set(req.session.id, client);
-  // Force express-session to persist (and send Set-Cookie) — with
-  // saveUninitialized:false it otherwise skips saving an untouched session.
+  // Setting session fields also forces express-session to persist (and send
+  // Set-Cookie) — with saveUninitialized:false it otherwise skips saving.
   req.session.username = username;
-  res.json({ authenticated: true });
+  req.session.role = role;
+  res.json({ authenticated: true, role });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -235,7 +254,7 @@ app.get('/api/timeline', requireAuth, async (req, res) => {
 // Edits an existing schedule's active state/days/times/setpoint/fan speed.
 // Only these fields are changeable from the timeline UI — name and
 // group/unit membership are left exactly as CoolRemote already has them.
-app.put('/api/schedules/:id', requireAuth, async (req, res) => {
+app.put('/api/schedules/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { customer } = await getFirstCustomerAndSite(req.client);
     const schedules = await req.client.getSchedules(customer.id);

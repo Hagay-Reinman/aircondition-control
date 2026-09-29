@@ -17,6 +17,9 @@ recurring schedule and actual runtime as an exact-time timeline instead of CoolR
   everything that schedule applies to, same as editing it in CoolRemote itself.
 - Shutoff-only schedules (a power-off with no power-on, e.g. a blanket "off" schedule on a parent group)
   are shown as an off marker instead of being silently dropped.
+- **Admin / view-only roles** — taken from the CoolRemote account's own permissions: accounts with
+  `canUpdate` can edit schedules; read-only accounts can browse the Schedule and History tabs but not
+  change anything (enforced server-side too).
 - Dark / light theme, persisted locally.
 
 ## Setup
