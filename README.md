@@ -13,7 +13,7 @@ recurring schedule and actual runtime as an exact-time timeline instead of CoolR
 - **Compact / Detailed** toggle — compact merges overlapping schedules into one block per row; detailed
   breaks them out onto their own lanes.
 - Click any schedule segment to edit it in place — days, start/end time, temperature, fan speed, and
-  mode (Cool / Heat / Auto / Dry / Fan, or leave the mode unchanged) —
+  mode (Cool / Heat, or leave the mode unchanged — CoolRemote schedules only support those two) —
   and save the change straight back to CoolRemote. Editing a schedule set on a shared/parent group affects
   everything that schedule applies to, same as editing it in CoolRemote itself.
 - **+ New schedule** — create a new weekly schedule on any group (including parent groups).

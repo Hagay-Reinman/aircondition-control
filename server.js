@@ -289,8 +289,9 @@ function parseScheduleFields(body) {
   if (!Number.isInteger(fanMode) || !(fanMode in FAN_MODE_LABELS)) {
     return { error: 'Invalid fan mode' };
   }
-  if (operationMode != null && (!Number.isInteger(operationMode) || !(operationMode in OPERATION_MODE_LABELS))) {
-    return { error: 'Invalid operation mode' };
+  // CoolRemote schedules only accept Cool (0) or Heat (1).
+  if (operationMode != null && operationMode !== 0 && operationMode !== 1) {
+    return { error: 'Schedule mode must be Cool or Heat' };
   }
   return {
     fields: {

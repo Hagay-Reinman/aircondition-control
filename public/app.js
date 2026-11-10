@@ -58,17 +58,14 @@ const FAN_MODES = [
   { value: 3, label: 'Auto' },
 ];
 
-// CoolAutomation OperationMode enum. '' means the schedule doesn't touch the
-// mode when it powers on (the unit keeps whatever mode it was last in).
-const OPERATION_MODES = [
+// Modes a schedule can set. CoolRemote only accepts Cool (0) or Heat (1) on
+// schedules ("run_mode must be one of [0, 1]"). '' means the schedule
+// doesn't touch the mode (the unit keeps whatever mode it was last in).
+const SCHEDULE_MODES = [
   { value: '', label: "Don't change" },
   { value: 0, label: 'Cool' },
   { value: 1, label: 'Heat' },
-  { value: 2, label: 'Auto' },
-  { value: 3, label: 'Dry' },
-  { value: 5, label: 'Fan' },
 ];
-const EXTRA_MODE_LABELS = { 4: 'Aux heat', 6: 'Heat/Heat', 7: 'Virtual auto' };
 
 let activeTab = 'schedule';
 let viewMode = 'daily';
@@ -494,13 +491,11 @@ function setScheduleType(offOnly) {
   editEndLabelEl.textContent = offOnly ? 'Off time' : 'End time';
 }
 
+// Any other stored mode shows as "Don't change", so saving never sends a
+// value CoolRemote would reject.
 function renderModeOptions(currentMode) {
-  const options = [...OPERATION_MODES];
-  if (currentMode != null && !options.some((o) => o.value === currentMode)) {
-    options.push({ value: currentMode, label: EXTRA_MODE_LABELS[currentMode] || `Mode ${currentMode}` });
-  }
-  editModeEl.innerHTML = options.map((o) => `<option value="${o.value}">${o.label}</option>`).join('');
-  editModeEl.value = currentMode != null ? String(currentMode) : '';
+  editModeEl.innerHTML = SCHEDULE_MODES.map((o) => `<option value="${o.value}">${o.label}</option>`).join('');
+  editModeEl.value = currentMode === 0 || currentMode === 1 ? String(currentMode) : '';
 }
 
 // Fills the shared form fields. `seg` is an existing schedule segment, or a
