@@ -91,6 +91,16 @@ class CoolRemoteClient {
     return this._request(`/schedules/${scheduleId}`, { method: 'PUT', body: payload });
   }
 
+  async getSchedule(scheduleId) {
+    return this._request(`/schedules/${scheduleId}`);
+  }
+
+  // Creates a new schedule attached to a group (all units in that group,
+  // including sub-groups, follow it).
+  async createGroupSchedule(groupId, payload) {
+    return this._request(`/schedules/groups/${groupId}`, { method: 'POST', body: payload });
+  }
+
   // Actual historical runtime, hour by hour, for one unit — as opposed to
   // getSchedules(), which is the *planned* recurring timer.
   async getUnitHourlyStats(unitId, startTimeUTC, endTimeUTC, bucketSizeMsec = 3_600_000) {

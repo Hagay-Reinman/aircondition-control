@@ -343,6 +343,40 @@ main {
   border-top: 5px solid var(--amber);
 }
 
+.off-marker.editable {
+  cursor: pointer;
+}
+
+/* Wider invisible hit area so a 3px line is still easy to click. */
+.off-marker.editable::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  right: -6px;
+}
+
+.off-marker.editable:hover {
+  width: 5px;
+}
+
+.off-marker.inactive {
+  opacity: 0.4;
+}
+
+#offonly-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .legend .off-marker-swatch {
   position: relative;
   width: 3px;

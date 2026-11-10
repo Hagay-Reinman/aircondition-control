@@ -29,6 +29,16 @@ const editStartEl = document.getElementById('edit-start');
 const editEndEl = document.getElementById('edit-end');
 const editSetpointEl = document.getElementById('edit-setpoint');
 const editFanEl = document.getElementById('edit-fan');
+const editModeEl = document.getElementById('edit-mode');
+const createFieldsEl = document.getElementById('create-fields');
+const editNameEl = document.getElementById('edit-name');
+const editGroupEl = document.getElementById('edit-group');
+const newScheduleBtn = document.getElementById('new-schedule-btn');
+const editTypeButtons = document.querySelectorAll('.type-toggle[data-type]');
+const startFieldEl = document.getElementById('start-field');
+const editEndLabelEl = document.getElementById('edit-end-label');
+const onFieldsEl = document.getElementById('on-fields');
+const offOnlyHintEl = document.getElementById('offonly-hint');
 const editErrorEl = document.getElementById('edit-error');
 const editCancelBtn = document.getElementById('edit-cancel-btn');
 const editSaveBtn = document.getElementById('edit-save-btn');
@@ -47,6 +57,18 @@ const FAN_MODES = [
   { value: 4, label: 'Top' },
   { value: 3, label: 'Auto' },
 ];
+
+// CoolAutomation OperationMode enum. '' means the schedule doesn't touch the
+// mode when it powers on (the unit keeps whatever mode it was last in).
+const OPERATION_MODES = [
+  { value: '', label: "Don't change" },
+  { value: 0, label: 'Cool' },
+  { value: 1, label: 'Heat' },
+  { value: 2, label: 'Auto' },
+  { value: 3, label: 'Dry' },
+  { value: 5, label: 'Fan' },
+];
+const EXTRA_MODE_LABELS = { 4: 'Aux heat', 6: 'Heat/Heat', 7: 'Virtual auto' };
 
 let activeTab = 'schedule';
 let viewMode = 'daily';
@@ -109,6 +131,7 @@ function describeSegment(seg, kind) {
     const detailParts = [];
     if (seg.setpoint != null) detailParts.push(`${seg.setpoint}°C`);
     if (seg.fan) detailParts.push(`${seg.fan} fan`);
+    if (seg.mode) detailParts.push(seg.mode);
     const extra = detailParts.length ? ` · ${detailParts.join(' · ')}` : '';
     const groupPart = seg.group ? ` (${seg.group})` : '';
     const inactivePart = seg.isDisabled ? ' · Inactive' : '';
@@ -122,7 +145,8 @@ function describeSegment(seg, kind) {
 // define an on-period, so they're drawn as a single instant, not a block.
 function describeOffMarker(marker) {
   const groupPart = marker.group ? ` (${marker.group})` : '';
-  return `${marker.source}${groupPart}\nShuts off at ${timeLabel(marker.time)}`;
+  const inactivePart = marker.isDisabled ? ' · Inactive' : '';
+  return `${marker.source}${groupPart}\nShuts off at ${timeLabel(marker.time)}${inactivePart}`;
 }
 
 // Collapses overlapping schedules into the actual on/off state of the unit,
@@ -216,6 +240,7 @@ function buildDetailedBar(bar, segments, kind) {
       const detailParts = [];
       if (seg.setpoint != null) detailParts.push(`${seg.setpoint}°C`);
       if (seg.fan) detailParts.push(`${seg.fan} fan`);
+      if (seg.mode) detailParts.push(seg.mode);
       if (seg.isDisabled) detailParts.push('Inactive');
       el.innerHTML = `
         <span class="segment-time">${time}</span>
@@ -243,9 +268,17 @@ function buildDetailedBar(bar, segments, kind) {
 function addOffMarkers(bar, offMarkers) {
   for (const marker of offMarkers) {
     const el = document.createElement('div');
-    el.className = 'off-marker';
+    el.className = `off-marker${marker.isDisabled ? ' inactive' : ''}`;
     el.style.left = `${(marker.time / 1440) * 100}%`;
     el.title = describeOffMarker(marker);
+    if (isAdmin) {
+      el.classList.add('editable');
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeSourcePicker();
+        openEditModal(marker);
+      });
+    }
     bar.appendChild(el);
   }
 }
@@ -348,9 +381,9 @@ async function apiGet(url) {
   return data;
 }
 
-async function apiPut(url, body) {
+async function apiSend(method, url, body) {
   const res = await fetch(url, {
-    method: 'PUT',
+    method,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
@@ -433,78 +466,181 @@ function editFormState() {
   const isDisabled = [...editStatusButtons].find((b) => b.classList.contains('active'))?.dataset.status === 'inactive';
   return JSON.stringify({
     isDisabled,
+    offOnly: isOffOnly(),
     days,
     start: editStartEl.value,
     end: editEndEl.value,
     setpoint: editSetpointEl.value,
     fanMode: editFanEl.value,
+    operationMode: editModeEl.value,
+    name: isCreating ? editNameEl.value : null,
+    groupId: isCreating ? editGroupEl.value : null,
   });
 }
 
 let editInitialState = null;
+let isCreating = false;
 
-function openEditModal(seg) {
-  editingSchedule = seg;
-  editModalTitle.textContent = seg.group ? `Edit — ${seg.source} (${seg.group})` : `Edit — ${seg.source}`;
+function isOffOnly() {
+  return [...editTypeButtons].find((b) => b.classList.contains('active'))?.dataset.type === 'offonly';
+}
+
+// Off-only schedules have just an off time — no start, temperature, fan or mode.
+function setScheduleType(offOnly) {
+  editTypeButtons.forEach((b) => b.classList.toggle('active', (b.dataset.type === 'offonly') === offOnly));
+  startFieldEl.classList.toggle('hidden', offOnly);
+  onFieldsEl.classList.toggle('hidden', offOnly);
+  offOnlyHintEl.classList.toggle('hidden', !offOnly);
+  editEndLabelEl.textContent = offOnly ? 'Off time' : 'End time';
+}
+
+function renderModeOptions(currentMode) {
+  const options = [...OPERATION_MODES];
+  if (currentMode != null && !options.some((o) => o.value === currentMode)) {
+    options.push({ value: currentMode, label: EXTRA_MODE_LABELS[currentMode] || `Mode ${currentMode}` });
+  }
+  editModeEl.innerHTML = options.map((o) => `<option value="${o.value}">${o.label}</option>`).join('');
+  editModeEl.value = currentMode != null ? String(currentMode) : '';
+}
+
+// Fills the shared form fields. `seg` is an existing schedule segment, or a
+// blank defaults object when creating.
+function fillScheduleForm(seg) {
   editStatusButtons.forEach((btn) => {
     btn.classList.toggle('active', (btn.dataset.status === 'inactive') === !!seg.isDisabled);
   });
   renderDayToggles(seg.days || []);
-  editStartEl.value = minutesToTimeValue(seg.rawStart);
-  editEndEl.value = minutesToTimeValue(seg.rawEnd);
+  const offOnly = seg.rawStart == null;
+  setScheduleType(offOnly);
+  // An off-only schedule has no start; prefill one in case it's switched to on & off.
+  editStartEl.value = minutesToTimeValue(offOnly ? 8 * 60 : seg.rawStart);
+  editEndEl.value = minutesToTimeValue(offOnly ? seg.time : seg.rawEnd);
   editSetpointEl.value = seg.setpoint != null ? seg.setpoint : 22;
   editFanEl.innerHTML = FAN_MODES.map((f) => `<option value="${f.value}">${f.label}</option>`).join('');
   editFanEl.value = seg.fanMode != null ? seg.fanMode : 3;
+  renderModeOptions(seg.operationMode);
   editErrorEl.textContent = '';
+}
+
+function openEditModal(seg) {
+  isCreating = false;
+  editingSchedule = seg;
+  createFieldsEl.classList.add('hidden');
+  editModalTitle.textContent = seg.group ? `Edit — ${seg.source} (${seg.group})` : `Edit — ${seg.source}`;
+  editSaveBtn.textContent = 'Save';
+  fillScheduleForm(seg);
   editModal.classList.remove('hidden');
   editInitialState = editFormState();
+}
+
+let groupsCache = null;
+
+async function openCreateModal() {
+  closeSourcePicker();
+  try {
+    if (!groupsCache) {
+      const overview = await apiGet('/api/overview');
+      groupsCache = overview.groups.slice().sort((a, b) => a.name.localeCompare(b.name));
+    }
+  } catch (err) {
+    setStatus(err.message, true);
+    return;
+  }
+  isCreating = true;
+  editingSchedule = null;
+  createFieldsEl.classList.remove('hidden');
+  editModalTitle.textContent = 'New schedule';
+  editSaveBtn.textContent = 'Create';
+  editNameEl.value = '';
+  editGroupEl.innerHTML =
+    '<option value="">Choose a group…</option>' +
+    groupsCache.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+  editGroupEl.value = '';
+  const defaultDays = activeTab === 'schedule' && viewMode === 'daily' ? [dayPicker.value] : [];
+  fillScheduleForm({ isDisabled: false, days: defaultDays, rawStart: 8 * 60, rawEnd: 18 * 60, setpoint: 24, fanMode: 3, operationMode: 0 });
+  editModal.classList.remove('hidden');
+  editInitialState = editFormState();
+  editNameEl.focus();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function closeEditModal() {
   editModal.classList.add('hidden');
   editingSchedule = null;
+  isCreating = false;
   editInitialState = null;
 }
 
 // Closes the modal, but warns first if the form was changed and not saved.
 function requestCloseEditModal() {
-  if (editingSchedule && editInitialState !== null && editFormState() !== editInitialState) {
+  if (editInitialState !== null && editFormState() !== editInitialState) {
     if (!window.confirm('You have unsaved changes. Discard them?')) return;
   }
   closeEditModal();
 }
 
 async function saveEdit() {
-  if (!editingSchedule) return;
+  if (!editingSchedule && !isCreating) return;
+  const name = editNameEl.value.trim();
+  const groupId = editGroupEl.value;
+  if (isCreating && !name) {
+    editErrorEl.textContent = 'Give the schedule a name.';
+    return;
+  }
+  if (isCreating && !groupId) {
+    editErrorEl.textContent = 'Choose which group the schedule applies to.';
+    return;
+  }
   const days = [...editDaysEl.querySelectorAll('.day-toggle.active')].map((b) => b.dataset.day);
   if (days.length === 0) {
     editErrorEl.textContent = 'Pick at least one day.';
     return;
   }
-  if (editStartEl.value === '' || editEndEl.value === '') {
-    editErrorEl.textContent = 'Start and end time are required.';
-    return;
-  }
-  const powerOnTime = timeToMinutes(editStartEl.value);
-  const powerOffTime = timeToMinutes(editEndEl.value);
-  if (powerOnTime === powerOffTime) {
-    editErrorEl.textContent = 'Start and end time can\'t be the same.';
-    return;
-  }
-  const setpoint = Number(editSetpointEl.value);
-  if (Number.isNaN(setpoint)) {
-    editErrorEl.textContent = 'Enter a valid temperature.';
-    return;
-  }
-  const fanMode = Number(editFanEl.value);
   const isDisabled = [...editStatusButtons].find((b) => b.classList.contains('active'))?.dataset.status === 'inactive';
+  let fields;
+  if (isOffOnly()) {
+    if (editEndEl.value === '') {
+      editErrorEl.textContent = 'Off time is required.';
+      return;
+    }
+    fields = { days, powerOnTime: null, powerOffTime: timeToMinutes(editEndEl.value), isDisabled };
+  } else {
+    if (editStartEl.value === '' || editEndEl.value === '') {
+      editErrorEl.textContent = 'Start and end time are required.';
+      return;
+    }
+    const powerOnTime = timeToMinutes(editStartEl.value);
+    const powerOffTime = timeToMinutes(editEndEl.value);
+    if (powerOnTime === powerOffTime) {
+      editErrorEl.textContent = 'Start and end time can\'t be the same.';
+      return;
+    }
+    const setpoint = Number(editSetpointEl.value);
+    if (Number.isNaN(setpoint)) {
+      editErrorEl.textContent = 'Enter a valid temperature.';
+      return;
+    }
+    const fanMode = Number(editFanEl.value);
+    const operationMode = editModeEl.value === '' ? null : Number(editModeEl.value);
+    fields = { days, powerOnTime, powerOffTime, setpoint, fanMode, operationMode, isDisabled };
+  }
 
   editSaveBtn.disabled = true;
   editErrorEl.textContent = '';
   try {
-    await apiPut(`/api/schedules/${editingSchedule.id}`, { days, powerOnTime, powerOffTime, setpoint, fanMode, isDisabled });
+    const result = isCreating
+      ? await apiSend('POST', '/api/schedules', { ...fields, name, groupId })
+      : await apiSend('PUT', `/api/schedules/${editingSchedule.id}`, fields);
     closeEditModal();
     await refresh();
+    if (result.modeApplied === false) {
+      setStatus('Saved, but CoolRemote did not keep the mode change — the schedule still has its previous mode.', true);
+    }
   } catch (err) {
     editErrorEl.textContent = err.message;
   } finally {
@@ -512,6 +648,9 @@ async function saveEdit() {
   }
 }
 
+editTypeButtons.forEach((btn) => {
+  btn.addEventListener('click', () => setScheduleType(btn.dataset.type === 'offonly'));
+});
 editStatusButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     editStatusButtons.forEach((b) => b.classList.toggle('active', b === btn));
@@ -520,6 +659,7 @@ editStatusButtons.forEach((btn) => {
 editModalClose.addEventListener('click', requestCloseEditModal);
 editCancelBtn.addEventListener('click', requestCloseEditModal);
 editSaveBtn.addEventListener('click', saveEdit);
+newScheduleBtn.addEventListener('click', openCreateModal);
 editModal.addEventListener('click', (e) => {
   if (e.target === editModal) requestCloseEditModal();
 });
@@ -636,6 +776,8 @@ function showApp(role) {
   isAdmin = role === 'admin';
   roleBadge.textContent = isAdmin ? 'Admin' : 'View only';
   roleBadge.classList.toggle('viewer', !isAdmin);
+  newScheduleBtn.classList.toggle('hidden', !isAdmin);
+  groupsCache = null;
   loginView.classList.add('hidden');
   appView.classList.remove('hidden');
   dayPicker.value = DAY_NAMES[new Date().getDay()];

@@ -83,6 +83,14 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 const FAN_MODE_LABELS = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Auto', 4: 'Top', 5: 'Very low', 6: 'Super high', 14: 'Off' };
 const OPERATION_MODE_LABELS = { 0: 'Cool', 1: 'Heat', 2: 'Auto', 3: 'Dry', 4: 'Aux heat', 5: 'Fan', 6: 'Heat/Heat', 7: 'Auto' };
 
+// Live schedule objects carry the mode as `runMode`, while the public API
+// spec calls it `operationMode` — read whichever is present.
+function scheduleMode(schedule) {
+  if (schedule.runMode != null) return schedule.runMode;
+  if (schedule.operationMode != null) return schedule.operationMode;
+  return null;
+}
+
 async function getFirstCustomerAndSite(client) {
   const [customer] = await client.getCustomers();
   const [site] = await client.getSites(customer.id);
@@ -140,7 +148,8 @@ function buildScheduleSegments(schedulesForDay, groupById) {
       setpoint: schedule.setpoint,
       fan: FAN_MODE_LABELS[schedule.fanMode] || null,
       fanMode: schedule.fanMode,
-      mode: OPERATION_MODE_LABELS[schedule.runMode] || null,
+      mode: OPERATION_MODE_LABELS[scheduleMode(schedule)] || null,
+      operationMode: scheduleMode(schedule),
       days: schedule.days || [],
       isDisabled: !!schedule.isDisabled,
       // The schedule's own start/end, independent of `start`/`end` below —
@@ -251,7 +260,91 @@ app.get('/api/timeline', requireAuth, async (req, res) => {
   }
 });
 
-// Edits an existing schedule's active state/days/times/setpoint/fan speed.
+// Validates the editable schedule fields shared by create and edit. Returns
+// { error } or { fields }. operationMode is optional: null/omitted means the
+// schedule doesn't change the unit's mode when it powers on.
+// powerOnTime: null makes it an off-only schedule (just shuts units off at
+// powerOffTime), which has no setpoint/fan/mode.
+function parseScheduleFields(body) {
+  const { days, powerOnTime, powerOffTime, setpoint, fanMode, operationMode, isDisabled } = body || {};
+  if (!Array.isArray(days) || days.length === 0 || !days.every((d) => DAY_NAMES.includes(d))) {
+    return { error: 'days must be a non-empty array of day names' };
+  }
+  const disabled = typeof isDisabled === 'boolean' ? isDisabled : undefined;
+  if (powerOnTime === null) {
+    if (!Number.isInteger(powerOffTime) || powerOffTime < 0 || powerOffTime >= 1440) {
+      return { error: 'powerOffTime must be minutes since midnight (0-1439)' };
+    }
+    return { fields: { offOnly: true, days, powerOnTime: null, powerOffTime, isDisabled: disabled } };
+  }
+  if (!Number.isInteger(powerOnTime) || powerOnTime < 0 || powerOnTime >= 1440) {
+    return { error: 'powerOnTime must be minutes since midnight (0-1439)' };
+  }
+  if (!Number.isInteger(powerOffTime) || powerOffTime < 0 || powerOffTime > 1440) {
+    return { error: 'powerOffTime must be minutes since midnight (0-1440)' };
+  }
+  if (typeof setpoint !== 'number' || Number.isNaN(setpoint)) {
+    return { error: 'setpoint must be a number' };
+  }
+  if (!Number.isInteger(fanMode) || !(fanMode in FAN_MODE_LABELS)) {
+    return { error: 'Invalid fan mode' };
+  }
+  if (operationMode != null && (!Number.isInteger(operationMode) || !(operationMode in OPERATION_MODE_LABELS))) {
+    return { error: 'Invalid operation mode' };
+  }
+  return {
+    fields: {
+      offOnly: false,
+      days,
+      powerOnTime,
+      powerOffTime,
+      setpoint,
+      fanMode,
+      operationMode: operationMode != null ? operationMode : null,
+      isDisabled: disabled,
+    },
+  };
+}
+
+// The mode goes out under both names: the API spec documents `operationMode`
+// but live schedules come back with `runMode`, and it isn't confirmed which
+// one CoolRemote actually stores on write.
+function withMode(payload, operationMode) {
+  if (operationMode == null) return payload;
+  return { ...payload, operationMode, runMode: operationMode };
+}
+
+// Time/setpoint/fan/mode part of a schedule payload. Off-only schedules send
+// just the off time with powerOnTime: null.
+function scheduleTimingPayload(fields) {
+  if (fields.offOnly) return { powerOnTime: null, powerOffTime: fields.powerOffTime, days: fields.days };
+  return withMode(
+    {
+      powerOnTime: fields.powerOnTime,
+      powerOffTime: fields.powerOffTime,
+      setpoint: fields.setpoint,
+      fanMode: fields.fanMode,
+      days: fields.days,
+    },
+    fields.operationMode
+  );
+}
+
+// Reads the schedule back after a write and reports whether the requested
+// mode actually stuck, so the UI can warn instead of silently failing.
+async function checkModeApplied(client, scheduleId, operationMode) {
+  if (operationMode == null || !scheduleId) return null;
+  try {
+    const saved = await client.getSchedule(scheduleId);
+    return scheduleMode(saved) === operationMode;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+// Edits an existing schedule's active state/days/times/setpoint/fan/mode,
+// including switching it between on & off and off-only.
 // Only these fields are changeable from the timeline UI — name and
 // group/unit membership are left exactly as CoolRemote already has them.
 app.put('/api/schedules/:id', requireAuth, requireAdmin, async (req, res) => {
@@ -261,35 +354,51 @@ app.put('/api/schedules/:id', requireAuth, requireAdmin, async (req, res) => {
     const schedule = schedules.find((s) => s.id === req.params.id);
     if (!schedule) return res.status(404).json({ error: 'Schedule not found' });
 
-    const { days, powerOnTime, powerOffTime, setpoint, fanMode, isDisabled } = req.body || {};
-    if (!Array.isArray(days) || days.length === 0 || !days.every((d) => DAY_NAMES.includes(d))) {
-      return res.status(400).json({ error: 'days must be a non-empty array of day names' });
-    }
-    if (!Number.isInteger(powerOnTime) || powerOnTime < 0 || powerOnTime >= 1440) {
-      return res.status(400).json({ error: 'powerOnTime must be minutes since midnight (0-1439)' });
-    }
-    if (!Number.isInteger(powerOffTime) || powerOffTime < 0 || powerOffTime > 1440) {
-      return res.status(400).json({ error: 'powerOffTime must be minutes since midnight (0-1440)' });
-    }
-    if (typeof setpoint !== 'number' || Number.isNaN(setpoint)) {
-      return res.status(400).json({ error: 'setpoint must be a number' });
-    }
-    if (!Number.isInteger(fanMode) || !(fanMode in FAN_MODE_LABELS)) {
-      return res.status(400).json({ error: 'Invalid fan mode' });
-    }
+    const { error, fields } = parseScheduleFields(req.body);
+    if (error) return res.status(400).json({ error });
 
     const payload = {
-      isDisabled: typeof isDisabled === 'boolean' ? isDisabled : schedule.isDisabled,
+      isDisabled: fields.isDisabled !== undefined ? fields.isDisabled : schedule.isDisabled,
       name: schedule.name,
       scheduleCategory: schedule.scheduleCategory,
-      powerOnTime,
-      powerOffTime,
-      setpoint,
-      fanMode,
-      days,
+      ...scheduleTimingPayload(fields),
     };
     await req.client.updateSchedule(req.params.id, payload);
-    res.json({ ok: true });
+    const modeApplied = await checkModeApplied(req.client, req.params.id, fields.operationMode);
+    res.json({ ok: true, modeApplied });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Creates a new weekly schedule on a group (any group on the site, including
+// parent groups — every unit underneath follows it).
+app.post('/api/schedules', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const { groupId } = req.body;
+
+    const { customer, site } = await getFirstCustomerAndSite(req.client);
+    const [groups, schedules] = await Promise.all([req.client.getGroups(site.id), req.client.getSchedules(customer.id)]);
+    if (!groups.some((g) => g.id === groupId)) return res.status(400).json({ error: 'Pick a valid group' });
+
+    const { error, fields } = parseScheduleFields(req.body);
+    if (error) return res.status(400).json({ error });
+
+    // Reuse the category the account's existing weekly schedules have, so the
+    // new one is the same kind CoolRemote's own app would create.
+    const weekly = schedules.find((s) => Array.isArray(s.days) && s.days.length > 0 && s.scheduleCategory != null);
+    const payload = {
+      name,
+      isDisabled: fields.isDisabled !== undefined ? fields.isDisabled : false,
+      ...(weekly ? { scheduleCategory: weekly.scheduleCategory } : {}),
+      ...scheduleTimingPayload(fields),
+    };
+    const created = await req.client.createGroupSchedule(groupId, payload);
+    const modeApplied = await checkModeApplied(req.client, created && created.id, fields.operationMode);
+    res.json({ ok: true, id: created && created.id, modeApplied });
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: err.message });

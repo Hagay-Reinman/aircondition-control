@@ -12,11 +12,14 @@ recurring schedule and actual runtime as an exact-time timeline instead of CoolR
 - **Daily / Weekly** toggle on both tabs.
 - **Compact / Detailed** toggle — compact merges overlapping schedules into one block per row; detailed
   breaks them out onto their own lanes.
-- Click any schedule segment to edit it in place — days, start/end time, temperature, and fan speed —
+- Click any schedule segment to edit it in place — days, start/end time, temperature, fan speed, and
+  mode (Cool / Heat / Auto / Dry / Fan, or leave the mode unchanged) —
   and save the change straight back to CoolRemote. Editing a schedule set on a shared/parent group affects
   everything that schedule applies to, same as editing it in CoolRemote itself.
+- **+ New schedule** — create a new weekly schedule on any group (including parent groups).
 - Shutoff-only schedules (a power-off with no power-on, e.g. a blanket "off" schedule on a parent group)
-  are shown as an off marker instead of being silently dropped.
+  are shown as an off marker instead of being silently dropped. Click a marker to edit it; any schedule
+  can be switched between **On & off** and **Off only**, and new schedules can be either type.
 - **Admin / view-only roles** — taken from the CoolRemote account's own permissions: accounts with
   `canUpdate` can edit schedules; read-only accounts can browse the Schedule and History tabs but not
   change anything (enforced server-side too).
