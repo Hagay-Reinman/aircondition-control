@@ -55,12 +55,14 @@ h1 {
 
 .controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   font-size: 14px;
   color: var(--muted);
 }
 
+.controls select,
 .controls input[type="date"] {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -501,6 +503,8 @@ main {
   border-radius: 12px;
   width: 100%;
   max-width: 380px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
 }
 
@@ -583,7 +587,8 @@ main {
   cursor: pointer;
 }
 
-.status-toggle {
+.status-toggle,
+.type-toggle {
   flex: 1;
   width: auto;
   padding: 8px 0;
@@ -632,4 +637,104 @@ main {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--muted);
+}
+
+/* ---- Phone layout ---- */
+@media (max-width: 700px) {
+  header {
+    padding: 12px 16px;
+  }
+
+  h1 {
+    font-size: 17px;
+  }
+
+  .controls {
+    gap: 8px;
+    width: 100%;
+  }
+
+  .controls .tab-btn {
+    padding: 7px 10px;
+  }
+
+  .controls button {
+    padding: 7px 12px;
+  }
+
+  .controls select,
+  .controls input[type="date"] {
+    font-size: 16px;
+  }
+
+  main {
+    padding: 12px 16px;
+  }
+
+  /* Day label goes above its bar so the timeline gets the full width. */
+  .axis {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .day-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 6px 0 8px;
+  }
+
+  .day-label {
+    flex: none;
+    padding: 0 10px;
+  }
+
+  .timeline-bar {
+    margin: 0 10px;
+  }
+
+  .group-header {
+    padding: 8px 10px;
+  }
+
+  .segment {
+    padding: 2px 3px;
+    font-size: 9.5px;
+  }
+
+  .segment.compact {
+    font-size: 10px;
+  }
+
+  .legend {
+    gap: 10px 16px;
+  }
+
+  /* Edit window becomes a bottom sheet. */
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-card {
+    max-width: none;
+    max-height: 92vh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .field-group input,
+  .field-group select,
+  .login-card input {
+    font-size: 16px;
+  }
+
+  .day-toggle {
+    padding: 9px 0;
+    width: 42px;
+  }
+
+  .status-toggle,
+  .type-toggle {
+    width: auto;
+  }
 }
