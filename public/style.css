@@ -819,11 +819,11 @@ main {
   color: var(--heat);
 }
 
-.power-btn:hover { filter: brightness(1.1); }
+.power-btn:not(:disabled):hover { filter: brightness(1.1); }
 
 .power-btn:disabled {
-  opacity: 0.5;
-  cursor: wait;
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 @media (max-width: 700px) {

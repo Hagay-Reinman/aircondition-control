@@ -769,12 +769,17 @@ function buildStatusGroup(group) {
     const actions = document.createElement('div');
     actions.className = 'group-actions';
     for (const on of [true, false]) {
-      actions.appendChild(
-        buildPowerButton(on, on ? 'Turn on' : 'Turn off', (btn) => {
-          if (!window.confirm(`Turn ${on ? 'on' : 'off'} all ${total} units in ${group.name}?`)) return;
-          setPower(group, on, btn);
-        })
-      );
+      const btn = buildPowerButton(on, on ? 'Turn on' : 'Turn off', (b) => {
+        if (!window.confirm(`Turn ${on ? 'on' : 'off'} all ${total} units in ${group.name}?`)) return;
+        setPower(group, on, b);
+      });
+      // Nothing to do if the whole group is already in that state; a partly-on
+      // group keeps both buttons.
+      if (on ? onCount === total : onCount === 0) {
+        btn.disabled = true;
+        btn.title = `${group.name} is already ${on ? 'on' : 'off'}`;
+      }
+      actions.appendChild(btn);
     }
     row.appendChild(actions);
   }
