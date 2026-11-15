@@ -702,18 +702,35 @@ async function loadHistory(dateStr) {
 
 // --- Live status ---
 
-async function setPower(url, on, button) {
+// After a power command, units take a while to report their new state, so
+// keep re-reading the status until the group matches (or we give up).
+async function setPower(group, on, button) {
   button.disabled = true;
   try {
-    await apiSend('PUT', url, { on });
-    await refresh();
-    if (statusEl.className !== 'error') {
-      setStatus(`${statusEl.textContent} — command sent; units can take a few seconds to report the new state.`);
-    }
+    await apiSend('PUT', `/api/groups/${group.id}/power`, { on });
   } catch (err) {
     button.disabled = false;
-    setStatus(err.message, true);
+    return setStatus(err.message, true);
   }
+  const verb = on ? 'on' : 'off';
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    setStatus(`Turning ${verb} ${group.name}… waiting for the units to report (${attempt * 3}s)`);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (activeTab !== 'status') return;
+    let data;
+    try {
+      data = await apiGet('/api/status');
+    } catch {
+      continue;
+    }
+    const current = data.groups.find((g) => g.id === group.id);
+    if (current && current.units.every((u) => u.isOn === on)) {
+      await refresh();
+      return setStatus(`${group.name} is now ${verb}. ${statusEl.textContent}`);
+    }
+  }
+  await refresh();
+  setStatus(`Command sent, but ${group.name} hasn't reported being ${verb} yet — refresh in a moment to check. ${statusEl.textContent}`);
 }
 
 function buildPowerButton(on, label, onClick) {
@@ -755,7 +772,7 @@ function buildStatusGroup(group) {
       actions.appendChild(
         buildPowerButton(on, on ? 'Turn on' : 'Turn off', (btn) => {
           if (!window.confirm(`Turn ${on ? 'on' : 'off'} all ${total} units in ${group.name}?`)) return;
-          setPower(`/api/groups/${group.id}/power`, on, btn);
+          setPower(group, on, btn);
         })
       );
     }

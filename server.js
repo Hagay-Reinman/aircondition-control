@@ -416,8 +416,20 @@ function unitField(unit, name) {
   return null;
 }
 
+// Logs the raw state fields of the first unit once per process, so the real
+// CoolRemote field names/values can be checked in the server logs.
+let loggedUnitSample = false;
+function logUnitSample(unit) {
+  if (loggedUnitSample || !unit) return;
+  loggedUnitSample = true;
+  const sample = Object.fromEntries(
+    Object.entries(unit).filter(([key]) => /status|mode|setpoint|temp|fan|connect|on/i.test(key))
+  );
+  console.log('Sample unit state fields:', JSON.stringify(sample));
+}
+
 function unitStatus(unit) {
-  const operationStatus = unitField(unit, 'operationStatus');
+  const operationStatus = Number(unitField(unit, 'operationStatus'));
   const operationMode = unitField(unit, 'operationMode');
   const fanMode = unitField(unit, 'fanMode');
   const ambient = unit.ambientTemperature != null ? unit.ambientTemperature : unit.roomTemperature;
@@ -440,6 +452,7 @@ app.get('/api/status', requireAuth, async (req, res) => {
     const { site } = await getFirstCustomerAndSite(req.client);
     const [groups, units] = await Promise.all([req.client.getGroups(site.id), req.client.getUnits(site.id)]);
     const groupById = Object.fromEntries(groups.map((g) => [g.id, g.name]));
+    logUnitSample(units[0]);
     const { leafGroupUnits } = buildLeafGroups(units, groupById);
     const groupOutput = [...leafGroupUnits.entries()].map(([leafId, memberUnits]) => ({
       id: leafId,
