@@ -702,14 +702,6 @@ async function loadHistory(dateStr) {
 
 // --- Live status ---
 
-function describeUnitState(unit) {
-  const parts = [];
-  if (unit.mode) parts.push(unit.mode);
-  if (unit.setpoint != null) parts.push(`Set ${unit.setpoint}°C`);
-  if (unit.fan) parts.push(`${unit.fan} fan`);
-  return parts.join(' · ');
-}
-
 async function setPower(url, on, button) {
   button.disabled = true;
   try {
@@ -733,74 +725,43 @@ function buildPowerButton(on, label, onClick) {
   return btn;
 }
 
-function buildUnitRow(unit) {
+function buildStatusGroup(group) {
+  const total = group.units.length;
+  const onCount = group.units.filter((u) => u.isOn).length;
+  const anyHeat = group.units.some((u) => u.isOn && segmentIsHeat(u));
+
   const row = document.createElement('div');
-  row.className = `unit-row${unit.isOn ? ' is-on' : ''}${unit.isConnected === false ? ' disconnected' : ''}`;
+  row.className = `unit-row group-status-row${onCount ? ' is-on' : ''}`;
 
   const dot = document.createElement('span');
-  dot.className = `state-dot${unit.isOn ? (segmentIsHeat(unit) ? ' heat' : ' on') : ''}`;
+  dot.className = `state-dot${onCount ? (anyHeat ? ' heat' : ' on') : ''}`;
   row.appendChild(dot);
 
   const info = document.createElement('div');
   info.className = 'unit-info';
   const name = document.createElement('div');
   name.className = 'unit-name';
-  name.textContent = unit.name;
+  name.textContent = group.name;
   const detail = document.createElement('div');
   detail.className = 'unit-detail';
-  const stateText = unit.isConnected === false ? 'Disconnected' : unit.isOn ? 'On' : 'Off';
-  const extra = unit.isOn ? describeUnitState(unit) : '';
-  detail.textContent = extra ? `${stateText} · ${extra}` : stateText;
+  detail.textContent = onCount === 0 ? `All off · ${total} units` : onCount === total ? `All on · ${total} units` : `${onCount} of ${total} units on`;
   info.append(name, detail);
   row.appendChild(info);
-
-  if (unit.ambientTemperature != null) {
-    const temp = document.createElement('div');
-    temp.className = 'unit-temp';
-    temp.textContent = `${Math.round(unit.ambientTemperature * 10) / 10}°C`;
-    temp.title = 'Room temperature';
-    row.appendChild(temp);
-  }
-
-  if (isAdmin) {
-    const turnOn = !unit.isOn;
-    row.appendChild(
-      buildPowerButton(turnOn, turnOn ? 'Turn on' : 'Turn off', (btn) =>
-        setPower(`/api/units/${unit.id}/power`, turnOn, btn)
-      )
-    );
-  }
-  return row;
-}
-
-function buildStatusGroup(group) {
-  const block = document.createElement('div');
-  block.className = 'group-block';
-
-  const header = document.createElement('div');
-  header.className = 'group-header status-group-header';
-  const onCount = group.units.filter((u) => u.isOn).length;
-  const title = document.createElement('span');
-  title.textContent = `${group.name} — ${onCount}/${group.units.length} on`;
-  header.appendChild(title);
 
   if (isAdmin) {
     const actions = document.createElement('div');
     actions.className = 'group-actions';
     for (const on of [true, false]) {
       actions.appendChild(
-        buildPowerButton(on, on ? 'All on' : 'All off', (btn) => {
-          if (!window.confirm(`Turn ${on ? 'on' : 'off'} all ${group.units.length} units in ${group.name}?`)) return;
+        buildPowerButton(on, on ? 'Turn on' : 'Turn off', (btn) => {
+          if (!window.confirm(`Turn ${on ? 'on' : 'off'} all ${total} units in ${group.name}?`)) return;
           setPower(`/api/groups/${group.id}/power`, on, btn);
         })
       );
     }
-    header.appendChild(actions);
+    row.appendChild(actions);
   }
-  block.appendChild(header);
-
-  for (const unit of group.units) block.appendChild(buildUnitRow(unit));
-  return block;
+  return row;
 }
 
 async function loadStatus() {
@@ -811,7 +772,10 @@ async function loadStatus() {
   const onCount = units.filter((u) => u.isOn).length;
   const list = document.createElement('div');
   list.className = 'groups-list status-list';
-  for (const group of data.groups) list.appendChild(buildStatusGroup(group));
+  const card = document.createElement('div');
+  card.className = 'group-block';
+  for (const group of data.groups) card.appendChild(buildStatusGroup(group));
+  list.appendChild(card);
   wrapEl.appendChild(list);
   const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   setStatus(`Live status as of ${time} — ${onCount} of ${units.length} units on`);

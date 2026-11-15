@@ -9,8 +9,8 @@ recurring schedule and actual runtime as an exact-time timeline instead of CoolR
   and fan speed for each block, labelled with the schedule (and group) that set it.
 - **History tab** — what actually ran on a given day, to the nearest 5 minutes, with the inferred
   cooling/heating mode.
-- **Status tab** — the live state of every unit, grouped by location: on/off, mode, setpoint, fan speed and
-  room temperature. Admins can turn any unit on or off, or a whole location at once (**All on / All off**).
+- **Status tab** — the live state of each location: whether its units are all on, all off, or partly on.
+  Admins can turn a whole location on or off.
 - **Daily / Weekly** toggle on the Schedule and History tabs.
 - **Compact / Detailed** toggle — compact merges overlapping schedules into one block per row; detailed
   breaks them out onto their own lanes.
