@@ -32,7 +32,7 @@ function requireAuth(req, res, next) {
 
 function requireAdmin(req, res, next) {
   if (req.session.role !== 'admin') {
-    return res.status(403).json({ error: 'Read-only access — only admins can modify schedules' });
+    return res.status(403).json({ error: 'Read-only access — only admins can make changes' });
   }
   next();
 }
@@ -405,6 +405,80 @@ app.post('/api/schedules', requireAuth, requireAdmin, async (req, res) => {
     res.status(502).json({ error: err.message });
   }
 });
+
+// Live unit state. Live CoolRemote objects tend to carry `active*` field
+// names (as with `runMode` on schedules) while the public API spec uses the
+// plain names — read whichever is present.
+function unitField(unit, name) {
+  const activeName = `active${name[0].toUpperCase()}${name.slice(1)}`;
+  if (unit[activeName] != null) return unit[activeName];
+  if (unit[name] != null) return unit[name];
+  return null;
+}
+
+function unitStatus(unit) {
+  const operationStatus = unitField(unit, 'operationStatus');
+  const operationMode = unitField(unit, 'operationMode');
+  const fanMode = unitField(unit, 'fanMode');
+  const ambient = unit.ambientTemperature != null ? unit.ambientTemperature : unit.roomTemperature;
+  return {
+    id: unit.id,
+    name: unit.name,
+    isOn: operationStatus === 1,
+    mode: OPERATION_MODE_LABELS[operationMode] || null,
+    setpoint: unitField(unit, 'setpoint'),
+    fan: FAN_MODE_LABELS[fanMode] || null,
+    ambientTemperature: ambient != null ? ambient : null,
+    isConnected: unit.isConnected != null ? !!unit.isConnected : null,
+  };
+}
+
+// Current on/off state (and mode/setpoint/fan/room temp) of every unit,
+// grouped by location.
+app.get('/api/status', requireAuth, async (req, res) => {
+  try {
+    const { site } = await getFirstCustomerAndSite(req.client);
+    const [groups, units] = await Promise.all([req.client.getGroups(site.id), req.client.getUnits(site.id)]);
+    const groupById = Object.fromEntries(groups.map((g) => [g.id, g.name]));
+    const { leafGroupUnits } = buildLeafGroups(units, groupById);
+    const groupOutput = [...leafGroupUnits.entries()].map(([leafId, memberUnits]) => ({
+      id: leafId,
+      name: groupById[leafId],
+      units: memberUnits.map(unitStatus).sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+    groupOutput.sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ timezone: site.timezone || 'UTC', groups: groupOutput });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Turns a single unit, or every unit in a group, on or off right now.
+async function setPower(req, res, kind) {
+  const { on } = req.body || {};
+  if (typeof on !== 'boolean') return res.status(400).json({ error: 'on must be true or false' });
+  try {
+    const { site } = await getFirstCustomerAndSite(req.client);
+    const operationStatus = on ? 1 : 2;
+    if (kind === 'unit') {
+      const units = await req.client.getUnits(site.id);
+      if (!units.some((u) => u.id === req.params.id)) return res.status(404).json({ error: 'Unit not found' });
+      await req.client.setUnitOperationStatus(req.params.id, operationStatus);
+    } else {
+      const groups = await req.client.getGroups(site.id);
+      if (!groups.some((g) => g.id === req.params.id)) return res.status(404).json({ error: 'Group not found' });
+      await req.client.setGroupOperationStatus(req.params.id, operationStatus);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+}
+
+app.put('/api/units/:id/power', requireAuth, requireAdmin, (req, res) => setPower(req, res, 'unit'));
+app.put('/api/groups/:id/power', requireAuth, requireAdmin, (req, res) => setPower(req, res, 'group'));
 
 // Actual history: what really ran, with exact start/end times, on a specific
 // calendar date (mode=daily) or the Sunday–Saturday week containing it

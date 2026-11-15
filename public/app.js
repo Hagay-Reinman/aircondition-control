@@ -17,6 +17,8 @@ const viewButtons = document.querySelectorAll('.view-btn[data-view]');
 const detailButtons = document.querySelectorAll('.detail-btn[data-detail]');
 const themeButtons = document.querySelectorAll('.theme-btn[data-theme]');
 const inactiveToggleEl = document.getElementById('inactive-toggle');
+const viewToggleEl = document.getElementById('view-toggle');
+const detailToggleEl = document.getElementById('detail-toggle');
 const inactiveButtons = document.querySelectorAll('.inactive-btn[data-inactive]');
 
 const editModal = document.getElementById('edit-modal');
@@ -698,12 +700,130 @@ async function loadHistory(dateStr) {
   setStatus(statusText);
 }
 
+// --- Live status ---
+
+function describeUnitState(unit) {
+  const parts = [];
+  if (unit.mode) parts.push(unit.mode);
+  if (unit.setpoint != null) parts.push(`Set ${unit.setpoint}°C`);
+  if (unit.fan) parts.push(`${unit.fan} fan`);
+  return parts.join(' · ');
+}
+
+async function setPower(url, on, button) {
+  button.disabled = true;
+  try {
+    await apiSend('PUT', url, { on });
+    await refresh();
+    if (statusEl.className !== 'error') {
+      setStatus(`${statusEl.textContent} — command sent; units can take a few seconds to report the new state.`);
+    }
+  } catch (err) {
+    button.disabled = false;
+    setStatus(err.message, true);
+  }
+}
+
+function buildPowerButton(on, label, onClick) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `power-btn ${on ? 'power-on' : 'power-off'}`;
+  btn.textContent = label;
+  btn.addEventListener('click', () => onClick(btn));
+  return btn;
+}
+
+function buildUnitRow(unit) {
+  const row = document.createElement('div');
+  row.className = `unit-row${unit.isOn ? ' is-on' : ''}${unit.isConnected === false ? ' disconnected' : ''}`;
+
+  const dot = document.createElement('span');
+  dot.className = `state-dot${unit.isOn ? (segmentIsHeat(unit) ? ' heat' : ' on') : ''}`;
+  row.appendChild(dot);
+
+  const info = document.createElement('div');
+  info.className = 'unit-info';
+  const name = document.createElement('div');
+  name.className = 'unit-name';
+  name.textContent = unit.name;
+  const detail = document.createElement('div');
+  detail.className = 'unit-detail';
+  const stateText = unit.isConnected === false ? 'Disconnected' : unit.isOn ? 'On' : 'Off';
+  const extra = unit.isOn ? describeUnitState(unit) : '';
+  detail.textContent = extra ? `${stateText} · ${extra}` : stateText;
+  info.append(name, detail);
+  row.appendChild(info);
+
+  if (unit.ambientTemperature != null) {
+    const temp = document.createElement('div');
+    temp.className = 'unit-temp';
+    temp.textContent = `${Math.round(unit.ambientTemperature * 10) / 10}°C`;
+    temp.title = 'Room temperature';
+    row.appendChild(temp);
+  }
+
+  if (isAdmin) {
+    const turnOn = !unit.isOn;
+    row.appendChild(
+      buildPowerButton(turnOn, turnOn ? 'Turn on' : 'Turn off', (btn) =>
+        setPower(`/api/units/${unit.id}/power`, turnOn, btn)
+      )
+    );
+  }
+  return row;
+}
+
+function buildStatusGroup(group) {
+  const block = document.createElement('div');
+  block.className = 'group-block';
+
+  const header = document.createElement('div');
+  header.className = 'group-header status-group-header';
+  const onCount = group.units.filter((u) => u.isOn).length;
+  const title = document.createElement('span');
+  title.textContent = `${group.name} — ${onCount}/${group.units.length} on`;
+  header.appendChild(title);
+
+  if (isAdmin) {
+    const actions = document.createElement('div');
+    actions.className = 'group-actions';
+    for (const on of [true, false]) {
+      actions.appendChild(
+        buildPowerButton(on, on ? 'All on' : 'All off', (btn) => {
+          if (!window.confirm(`Turn ${on ? 'on' : 'off'} all ${group.units.length} units in ${group.name}?`)) return;
+          setPower(`/api/groups/${group.id}/power`, on, btn);
+        })
+      );
+    }
+    header.appendChild(actions);
+  }
+  block.appendChild(header);
+
+  for (const unit of group.units) block.appendChild(buildUnitRow(unit));
+  return block;
+}
+
+async function loadStatus() {
+  const data = await apiGet('/api/status');
+  timezoneLabel.textContent = data.timezone ? `(${data.timezone})` : '';
+  if (data.groups.length === 0) return setStatus('No groups found.');
+  const units = data.groups.flatMap((g) => g.units);
+  const onCount = units.filter((u) => u.isOn).length;
+  const list = document.createElement('div');
+  list.className = 'groups-list status-list';
+  for (const group of data.groups) list.appendChild(buildStatusGroup(group));
+  wrapEl.appendChild(list);
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  setStatus(`Live status as of ${time} — ${onCount} of ${units.length} units on`);
+}
+
 async function refresh() {
   lastRender = null;
   setStatus('Loading…');
   wrapEl.innerHTML = '';
   try {
     if (activeTab === 'schedule') await loadSchedule(dayPicker.value);
+    else if (activeTab === 'status') await loadStatus();
     else await loadHistory(datePicker.value);
   } catch (err) {
     setStatus(err.message, true);
@@ -714,13 +834,16 @@ function updateControlsVisibility() {
   dayPicker.classList.toggle('hidden', !(activeTab === 'schedule' && viewMode === 'daily'));
   datePicker.classList.toggle('hidden', activeTab !== 'history');
   inactiveToggleEl.classList.toggle('hidden', activeTab !== 'schedule');
+  viewToggleEl.classList.toggle('hidden', activeTab === 'status');
+  detailToggleEl.classList.toggle('hidden', activeTab === 'status');
 }
 
 function setTab(tab) {
   activeTab = tab;
   tabButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tab));
   updateControlsVisibility();
-  pageTitle.textContent = tab === 'schedule' ? 'Air Conditioning — Weekly Schedule' : 'Air Conditioning — Actual History';
+  const titles = { schedule: 'Weekly Schedule', history: 'Actual History', status: 'Current Status' };
+  pageTitle.textContent = `Air Conditioning — ${titles[tab]}`;
   refresh();
 }
 

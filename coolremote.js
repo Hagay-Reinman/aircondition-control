@@ -101,6 +101,15 @@ class CoolRemoteClient {
     return this._request(`/schedules/groups/${groupId}`, { method: 'POST', body: payload });
   }
 
+  // operationStatus: 1 = on, 2 = off (CoolAutomation OperationStatus enum).
+  async setUnitOperationStatus(unitId, operationStatus) {
+    return this._request(`/units/${unitId}/controls/operation-statuses`, { method: 'PUT', body: { operationStatus } });
+  }
+
+  async setGroupOperationStatus(groupId, operationStatus) {
+    return this._request(`/groups/${groupId}/controls/operation-statuses`, { method: 'PUT', body: { operationStatus } });
+  }
+
   // Actual historical runtime, hour by hour, for one unit — as opposed to
   // getSchedules(), which is the *planned* recurring timer.
   async getUnitHourlyStats(unitId, startTimeUTC, endTimeUTC, bucketSizeMsec = 3_600_000) {
