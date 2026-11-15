@@ -69,7 +69,7 @@ const SCHEDULE_MODES = [
   { value: 1, label: 'Heat' },
 ];
 
-let activeTab = 'schedule';
+let activeTab = 'status';
 let viewMode = 'daily';
 let detailMode = 'compact';
 let showInactive = false;
@@ -881,7 +881,7 @@ function showApp(role) {
   appView.classList.remove('hidden');
   dayPicker.value = DAY_NAMES[new Date().getDay()];
   datePicker.value = new Date().toISOString().slice(0, 10);
-  setTab('schedule');
+  setTab('status');
 }
 
 loginForm.addEventListener('submit', async (e) => {
